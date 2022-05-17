@@ -100,11 +100,7 @@ with open("/etc/containerd/config.toml", "w") as f:
     toml.dump(data, f)
 END
 
-# -----------------------------------------------------------------
-# Kubernetes
-# -----------------------------------------------------------------
-echo "Configure firewall for kubernetes"
-
+sudo systemctl restart containerd
 
 echo "Add Kubernetes repository repository to apt"
 sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
@@ -115,6 +111,14 @@ sudo apt update
 sudo apt install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
 # Set iptables bridging
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -124,7 +128,7 @@ sudo echo '1' > /proc/sys/net/ipv4/ip_forward
 sudo sysctl --system
 
 echo "Initializing cluster"
-kubeadm init --control-plane-endpoint $CONTROL_PLANE_HOST --pod-network-cidr=$POD_NETWORK_CIDR --node-name $NODE_NAME
+kubeadm init --config /vagrant/kubeadm-config.yaml --control-plane-endpoint $CONTROL_PLANE_HOST --pod-network-cidr=$POD_NETWORK_CIDR --node-name $NODE_NAME
 
 echo "Install bash completion."
 sudo apt install bash-completion
@@ -170,4 +174,3 @@ echo "Installing sonobuoy to run cluster health tests"
 curl -fsSLO https://github.com/vmware-tanzu/sonobuoy/releases/download/v${SONOBUOY_VERSION}/sonobuoy_${SONOBUOY_VERSION}_linux_amd64.tar.gz
 sudo tar -xzvf sonobuoy_${SONOBUOY_VERSION}_linux_amd64.tar.gz
 mv sonobuoy /usr/local/bin/sonobuoy
-
